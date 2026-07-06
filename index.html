@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formato de Cierre Final</title>
+    <!-- Tailwind CSS para el diseño -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .row-grid { 
+            display: grid; 
+            grid-template-columns: 40% 60%; 
+            border-bottom: 1px solid #e5e7eb; 
+        }
+        .cell-label { 
+            background: #f9fafb; 
+            padding: 8px 12px; 
+            font-weight: 600; 
+            font-size: 0.75rem; 
+            border-right: 1px solid #e5e7eb; 
+            display: flex; 
+            align-items: center; 
+            color: #4b5563;
+        }
+        .section-header { 
+            background: #4b5563; 
+            color: white; 
+            padding: 6px 12px; 
+            font-weight: bold; 
+            font-size: 0.75rem; 
+            grid-column: span 2; 
+            letter-spacing: 0.05em;
+        }
+        /* Estilos personalizados para simular las pestañas de Excel */
+        .excel-tab {
+            border-top-left-radius: 6px;
+            border-top-right-radius: 6px;
+            transition: all 0.2s ease;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen font-sans">
+
+    <!-- Notificación integrada en pantalla -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-10 opacity-0 pointer-events-none transition-all duration-300 bg-gray-900 text-white px-6 py-3 rounded-lg shadow-xl flex items-center gap-2">
+        <span id="toast-icon">✨</span>
+        <span id="toast-message">Copiado con éxito</span>
+    </div>
+
+    <div id="app"></div>
+
+    <script>
+        // Catálogo actualizado y expandido de Códigos y Motivos
+        const codigosYMotivos = {
+            "CANCELADO": ["SERVICIO RESTABLECE CON IDC EN TRANSITO", "SE CANCELA IDC EN TRANSITO", "SE SOLICITA CANCELAR ANTES DE ASIGNAR IDC"],
+            "CONFIGURACIÓN DE EQUIPOS": ["CUALQUIER CONFIGURACIÓN DE EQUIPO PERTENECIENTE A TE"],
+            "CONFIGURACIÓN DE ONT": ["CUALQUIER CONFIGURACIÓN DE ONT COMO ACTIVIDAD PRINCIPAL"],
+            "CORRECCIÓN DE CONEXIONES": ["CAMBIO DE PUERTOS", "CONEXION, NO ESTABAN CONECTADOS", "REMPLAZO DE CABLE"],
+            "DIRECCIÓN ERRONEA": ["SE ACUDE A SITIO Y NO ES EL SITIO CORRECTO", "NOS PIDEN MOVERNOS A UN SITIO CERCANO", "DIRECCIÓN INCORRECTA EN SM"],
+            "EQUIPO DAÑADO": ["SE DIAGNOSTICA DAÑO EN EL EQUIPO", "DAÑO POR FAUNA", "DAÑO POR VANDALISMO", "SE RECOMIENDA HACER UNA REUBICACIÓN DE EQUIPOS"],
+            "FALLA DE ENERGÍA": ["CLIENTE APAGO LOS EQUIPOS", "CORTES DE ENERGIA POR CONDICIONES CLIMATICAS", "SIN ENERGÍA ELCTRICA", "PROBLEMAS CON LA INSTALACIÓN"],
+            "FALLA DE MEDIO": ["FALLA DE TRANSMISIONES", "SE DIAGNOSTICA DAÑO EN EL EQUIPO DE Tx", "CAMBIO DE EQUIPO POR PARTE DE Tx", "SE HACE CITA EN CONJUNTO Y SE DETERMINA FALLO DE MEDIO"],
+            "OTRO": ["FALLA EN EL CABLEADO", "FALLA EN FIBRA OPTICA", "EQUIPOS MOJADOS", "VISITA DE INSPECCIÓN", "LEVANTAMIENTOS", "RESET DE EQUIPO", "VISITA EN CONJUNTO, SIN INTERVENCION POR PARTE DE IDC", "RECOLECCION DE EQUIPO", "REMODELACION O CONSTRUCCION EN SITIO", "CALENTAMIENTO DE EQUIPOS POR FALTA DE VENTILACION", "DESINTALACION DE EQUIPO", "ROBO DE EQUIPO", "SE ENTREGA EQUIPO A SITIO", "SE REALIZA LIMPIEZA DE EQUIPO", "PRESTAMO DE EQUIPO"],
+            "REEMPLAZO DE EQUIPO": ["CAMBIO DE CUALQUIER EQUIPO GESTIONADO POR TELMEX", "REEMPLAZO DE EQUIPO POR PARTE DE TX"],
+            "SIN ACCESO": ["NO SE TRAMITO ACCESO", "CLIENTE NO ESTABA EN SITIO", "IDC NO CUMPLE CON LOS REQUISITOS", "NO LLEGA TX A VISITA EN CONJUNTO", "NO LLEGA VALORES A DAR ACCESO A EQUIPO", "CLIENTE NO DA VT", "NO SE ESTABLECE COMUNICACION CON LA MESA Y PIDEN RETIRARNOS"],
+            "SIN FALLA": ["SOLICITAN PRUEBAS", "REVISIÓN DE CONDICIONES DE SITE", "REVISIÓN DE CONEXIONES", "SE LLEGA A SITIO Y PIDEN RETIRARNOS", "REVISIÓN DE CONDICIONES DEL EQUIPO", "SERVICIO DADO DE BAJA", "SERVICIO ACTIVO"],
+            "SOLICITUD ERRONEA": ["SIN EQUIPOS EN SITIO", "EQUIPO REPORTADO NO ES CORRECTO", "ACTIVIDAD PERTENECE A UNA IMPLEMENTACIÓN"],
+            "EQUIPO NO REEMPLAZADO": ["EQUIPO SIN DAÑO", "EQUIPO LLEGO DAÑADO", "EQUIPO A PRESTAMO", "NO SE CONTO CON VT", "SIN VT POR PARTE DE CLIENTE PARA REMPLAZO"],
+            "GUARDIA": ["IDC REALIZA GUARDIA EN SITIO"],
+            "CABLEADO": ["REMPLAZO DE CABLE", "REPARACION DE CABLEADO", "ETIQUETADO", "PEINADO DE CABLEADO EN SITIO", "REPARACION DE FIBRA OPTICA"],
+            "REPROGRAMADO": ["BLOQUEO RUMBO A SITIO", "SE REPROGRAMA A PETICION DE CLENTE", "SE REPORGRAMA A PETICION DE CSC"]
+        };
+
+        // Estado Global de la aplicación
+        let sheets = [];
+        let activeSheetId = null;
+
+        // Generar estructura vacía para una nueva pestaña
+        function createInitialData(customName) {
+            return {
+                id: Date.now() + Math.random(),
+                name: customName || `Hoja ${sheets.length + 1}`,
+                data: { 
+                    estatus: '', 
+                    codigoCierre: '', 
+                    motivoCierre: '', 
+                    etaLlegada: '', 
+                    nombreIdc: '', 
+                    fallaReportada: '', 
+                    fallaDetectada: '', 
+                    equipoRevisado: '', 
+                    accionCorrectiva: '', 
+                    horarioLlegada: '', 
+                    horarioAcceso: '', 
+                    horarioSolucion: '', 
+                    horarioSalida: '', 
+                    nombreClienteValida: '', 
+                    nombreCentroValida: '', 
+                    bitacora: '', 
+                    atencionCentro: 'Buena', 
+                    servicioQuedo: 'Concluido', 
+                    atencionSc: 'Buena', 
+                    dirFisicaCorrecta: 'SI', 
+                    dirCorrecta: 'N/A', 
+                    afectacionServicio: 'SI', 
+                    conexionesCorrectas: 'NA (SIN ACCESO)', 
+                    equiposDesconectados: 'NA (SIN ACCESO)', 
+                    energiaElectrica: 'NA (SIN ACCESO)', 
+                    tornillosBarridos: 'NA (SIN ACCESO)', 
+                    equiposMontados: 'NA (SIN ACCESO)', 
+                    refaccionInstalada: '', 
+                    modelo: '', 
+                    nsRefaccionInstalada: '', 
+                    nsRefaccionRetirada: '', 
+                    rma: '', 
+                    refaccionSeQueda: 'NO', 
+                    motivoSeQueda: 'NA', 
+                    personalAutoriza: 'NA' 
+                }
+            };
+        }
+
+        // Inicializador principal
+        function init() {
+            const firstSheet = createInitialData('Hoja 1');
+            sheets = [firstSheet];
+            activeSheetId = firstSheet.id;
+            render();
+        }
+
+        // Sistema dinámico de Toast de confirmación
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            const icon = document.getElementById('toast-icon');
+            const msg = document.getElementById('toast-message');
+            
+            icon.textContent = isError ? '❌' : '📋';
+            msg.textContent = message;
+            
+            toast.className = `fixed bottom-5 right-5 z-50 transform translate-y-0 opacity-100 transition-all duration-300 px-6 py-3 rounded-lg shadow-xl flex items-center gap-2 ${isError ? 'bg-red-600 text-white' : 'bg-green-600 text-white'}`;
+            
+            setTimeout(() => {
+                toast.className = "fixed bottom-5 right-5 z-50 transform translate-y-10 opacity-0 pointer-events-none transition-all duration-300 bg-gray-900 text-white px-6 py-3 rounded-lg shadow-xl flex items-center gap-2";
+            }, 3000);
+        }
+
+        // Renderizado general de la interfaz
+        function render() {
+            const container = document.getElementById('app');
+            const activeSheet = sheets.find(s => s.id === activeSheetId) || sheets[0];
+            
+            if (!activeSheet) return;
+
+            container.innerHTML = `
+                <!-- Barra de Navegación y Acciones Superiores -->
+                <header class="bg-gray-900 text-white sticky top-0 z-40 shadow-md">
+                    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-3">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xl">📊</span>
+                            <h1 class="text-lg font-bold tracking-tight">Formato de Cierre Final</h1>
+                        </div>
+                        
+                        <div class="flex flex-wrap items-center gap-2">
+                            <!-- Enlace directo de redirección solicitado -->
+                            <a href="https://sm.cnoc.telmexit.com/sm/index.do?_" target="_blank" rel="noopener noreferrer" 
+                               class="bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-semibold py-2 px-3 rounded flex items-center gap-1.5 transition duration-150 shadow-sm">
+                                🌐 Abrir CNOC SM
+                            </a>
+                            <button onclick="copyActiveSheet()" 
+                                    class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2 px-3 rounded flex items-center gap-1.5 transition duration-150 shadow-sm"
+                                    title="Copia los datos de esta pestaña sin el encabezado">
+                                📋 Copiar Hoja Activa
+                            </button>
+                            <button onclick="copyAll()" 
+                                    class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2 px-3 rounded flex items-center gap-1.5 transition duration-150 shadow-sm"
+                                    title="Copia el contenido consolidado de todas tus hojas creadas">
+                                📚 Copiar Todas las Hojas
+                            </button>
+                            <button onclick="clearAll()" 
+                                    class="bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold py-2 px-3 rounded flex items-center gap-1.5 transition duration-150 shadow-sm">
+                                🧹 Restablecer Todo
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Navegación de Pestañas estilo Excel -->
+                    <div class="bg-gray-800 border-t border-gray-700">
+                        <div class="max-w-7xl mx-auto px-4 flex items-end pt-2 overflow-x-auto gap-1">
+                            ${sheets.map(s => {
+                                const isActive = s.id === activeSheetId;
+                                return `
+                                    <div class="group relative flex items-center">
+                                        <button onclick="setActiveSheet(${s.id})" 
+                                            class="excel-tab px-4 py-2 text-xs font-semibold transition-all duration-150 whitespace-nowrap flex items-center gap-2 
+                                            ${isActive 
+                                                ? 'bg-white text-gray-900 font-bold border-t-2 border-emerald-500 shadow-sm' 
+                                                : 'bg-gray-700 text-gray-300 hover:bg-gray-650 hover:text-white'}">
+                                            <span>📁 ${s.name}</span>
+                                        </button>
+                                        ${sheets.length > 1 ? `
+                                            <button onclick="deleteSheet(${s.id}, event)" 
+                                                class="absolute -top-1.5 -right-1 hidden group-hover:flex bg-red-500 text-white text-[9px] w-4 h-4 rounded-full items-center justify-center hover:bg-red-600 shadow border border-white">
+                                                ✕
+                                            </button>
+                                        ` : ''}
+                                    </div>
+                                `;
+                            }).join('')}
+                            
+                            <!-- Botón agregar hoja dinámica -->
+                            <button onclick="addSheet()" 
+                                    class="excel-tab px-3 py-2 text-xs font-bold text-emerald-400 bg-gray-800 hover:bg-gray-700 hover:text-emerald-300 transition duration-150 mb-0.5" 
+                                    title="Agregar Nueva Hoja">
+                                ➕ Nueva Hoja
+                            </button>
+                        </div>
+                    </div>
+                </header>
+
+                <main class="max-w-4xl mx-auto p-4 md:p-6">
+                    <!-- Contenedor del Formulario Activo -->
+                    <div class="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
+                        
+                        <!-- Cabecera de la Hoja Seleccionada con opción de renombrar -->
+                        <div class="bg-gradient-to-r from-gray-700 to-gray-800 text-white px-4 py-3 flex justify-between items-center border-b border-gray-200">
+                            <div class="flex items-center gap-2">
+                                <span class="bg-emerald-500 text-white px-2 py-0.5 rounded text-[10px] font-bold">ACTIVA</span>
+                                <input type="text" 
+                                       value="${activeSheet.name}" 
+                                       onchange="renameSheet(${activeSheet.id}, this.value)"
+                                       class="bg-transparent font-bold text-sm border-b border-dashed border-gray-400 focus:border-white focus:outline-none px-1 py-0.5 rounded w-48 text-white placeholder-gray-300"
+                                       title="Modifica el nombre de la pestaña aquí"
+                                       placeholder="Nombre de pestaña" />
+                            </div>
+                            <span class="text-xs text-gray-400 font-mono">ID: #${Math.floor(activeSheet.id % 10000)}</span>
+                        </div>
+
+                        <!-- Formulario de Campos -->
+                        <div class="divide-y divide-gray-100">
+                            ${renderFormFields(activeSheet)}
+                        </div>
+
+                    </div>
+                </main>
+            `;
+        }
+
+        // Renderizado del formulario para la hoja activa con mapeo de selects
+        function renderFormFields(s) {
+            const d = s.data;
+            const sel = (key, opt) => `
+                <div class="w-full relative">
+                    <select class="p-2 w-full text-xs text-gray-800 bg-transparent focus:bg-white focus:ring-1 focus:ring-emerald-500 focus:outline-none rounded" 
+                            onchange="updateData(${s.id}, '${key}', this.value)">
+                        ${opt.map(o => `<option ${d[key] === o ? 'selected' : ''}>${o}</option>`).join('')}
+                    </select>
+                </div>
+            `;
+
+            return `
+                <!-- Datos de Estatus -->
+                <div class="row-grid">
+                    <div class="cell-label">ESTATUS</div>
+                    <input class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.estatus}" placeholder="Escribe estatus de operación..."
+                           oninput="updateData(${s.id}, 'estatus', this.value)">
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">CÓDIGO DE CIERRE</div>
+                    <select class="p-2 w-full text-xs bg-transparent focus:outline-none" 
+                            onchange="updateData(${s.id}, 'codigoCierre', this.value); updateData(${s.id}, 'motivoCierre', ''); render();">
+                        <option value="">Seleccione...</option>
+                        ${Object.keys(codigosYMotivos).map(c => `<option ${d.codigoCierre === c ? 'selected' : ''}>${c}</option>`).join('')}
+                    </select>
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">MOTIVO DE CIERRE</div>
+                    <select class="p-2 w-full text-xs bg-transparent focus:outline-none" 
+                            onchange="updateData(${s.id}, 'motivoCierre', this.value)"
+                            ${!d.codigoCierre ? 'disabled' : ''}>
+                        <option value="">${d.codigoCierre ? 'Seleccione un motivo...' : 'Primero elija código de cierre'}</option>
+                        ${(codigosYMotivos[d.codigoCierre] || []).map(m => `<option ${d.motivoCierre === m ? 'selected' : ''}>${m}</option>`).join('')}
+                    </select>
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">ETA LLEGADA</div>
+                    <input type="date" class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.etaLlegada}" onchange="updateData(${s.id}, 'etaLlegada', this.value)">
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">NOMBRE IDC</div>
+                    <input class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.nombreIdc}" oninput="updateData(${s.id}, 'nombreIdc', this.value)">
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">FALLA REPORTADA</div>
+                    <input class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.fallaReportada}" oninput="updateData(${s.id}, 'fallaReportada', this.value)">
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">FALLA DETECTADA</div>
+                    <input class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.fallaDetectada}" oninput="updateData(${s.id}, 'fallaDetectada', this.value)">
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">EQUIPO REVISADO</div>
+                    <input class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.equipoRevisado}" oninput="updateData(${s.id}, 'equipoRevisado', this.value)">
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">ACCION CORRECTIVA</div>
+                    <input class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.accionCorrectiva}" oninput="updateData(${s.id}, 'accionCorrectiva', this.value)">
+                </div>
+
+                <!-- Sección: Datos de Actividades -->
+                <div class="section-header">DATOS DE ACTIVIDADES</div>
+
+                <div class="row-grid">
+                    <div class="cell-label">H. LLEGADA</div>
+                    <input type="time" class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.horarioLlegada}" oninput="updateData(${s.id}, 'horarioLlegada', this.value)">
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">H. ACCESO</div>
+                    <input type="time" class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.horarioAcceso}" oninput="updateData(${s.id}, 'horarioAcceso', this.value)">
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">H. SOLUCIÓN</div>
+                    <input type="time" class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.horarioSolucion}" oninput="updateData(${s.id}, 'horarioSolucion', this.value)">
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">H. SALIDA</div>
+                    <input type="time" class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.horarioSalida}" oninput="updateData(${s.id}, 'horarioSalida', this.value)">
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">CLIENTE QUE VALIDA</div>
+                    <input class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.nombreClienteValida}" oninput="updateData(${s.id}, 'nombreClienteValida', this.value)">
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">CENTRO QUE VALIDA</div>
+                    <input class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.nombreCentroValida}" oninput="updateData(${s.id}, 'nombreCentroValida', this.value)">
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">BITACORA</div>
+                    <input class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.bitacora}" oninput="updateData(${s.id}, 'bitacora', this.value)">
+                </div>
+
+                <!-- Sección: Evaluación de Atención -->
+                <div class="section-header">EVALUACIÓN DE ATENCIÓN</div>
+
+                <div class="row-grid">
+                    <div class="cell-label">ATENCIÓN CENTRO</div>
+                    ${sel('atencionCentro', ['Excelente', 'Buena', 'Regular', 'Mala', 'Muy mala'])}
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">SERVICIO QUEDÓ</div>
+                    ${sel('servicioQuedo', ['Concluido', 'Cancelado', 'Reprogramado', 'No terminado', 'No Atendido'])}
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">ATENCIÓN SC</div>
+                    ${sel('atencionSc', ['Excelente', 'Buena', 'Regular', 'Mala', 'Muy mala'])}
+                </div>
+
+                <!-- Sección: Observaciones -->
+                <div class="section-header">OBSERVACIONES</div>
+
+                <div class="row-grid">
+                    <div class="cell-label">DIR. FÍSICA CORRECTA</div>
+                    ${sel('dirFisicaCorrecta', ['SI', 'NO'])}
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">DIRECCIÓN CORRECTA</div>
+                    <input class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.dirCorrecta}" oninput="updateData(${s.id}, 'dirCorrecta', this.value)">
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">¿AFECTACIÓN SERVICIO?</div>
+                    ${sel('afectacionServicio', ['SI', 'NO'])}
+                </div>
+
+                <!-- Sección: Condiciones del Site -->
+                <div class="section-header">CONDICIONES DEL SITE</div>
+
+                <div class="row-grid">
+                    <div class="cell-label">¿CONEXIONES CORRECTAS?</div>
+                    ${sel('conexionesCorrectas', ['NA (SIN ACCESO)', 'SI', 'NO'])}
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">¿EQUIPOS DESCONECTADOS?</div>
+                    ${sel('equiposDesconectados', ['NA (SIN ACCESO)', 'SI', 'NO'])}
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">¿ENERGÍA ELECTRICA?</div>
+                    ${sel('energiaElectrica', ['NA (SIN ACCESO)', 'SI', 'NO'])}
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">¿TORNILLOS BARRIDOS?</div>
+                    ${sel('tornillosBarridos', ['NA (SIN ACCESO)', 'SI', 'NO'])}
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">¿EQUIPOS EN RACK?</div>
+                    ${sel('equiposMontados', ['NA (SIN ACCESO)', 'SI', 'NO'])}
+                </div>
+
+                <!-- Sección: Datos de Refacción -->
+                <div class="section-header">DATOS DE REFACCIÓN</div>
+
+                <div class="row-grid">
+                    <div class="cell-label">REFACCIÓN INSTALADA</div>
+                    <input class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.refaccionInstalada}" oninput="updateData(${s.id}, 'refaccionInstalada', this.value)">
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">MODELO</div>
+                    <input class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.modelo}" oninput="updateData(${s.id}, 'modelo', this.value)">
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">NS INSTALADA</div>
+                    <input class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.nsRefaccionInstalada}" oninput="updateData(${s.id}, 'nsRefaccionInstalada', this.value)">
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">NS RETIRADA</div>
+                    <input class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.nsRefaccionRetirada}" oninput="updateData(${s.id}, 'nsRefaccionRetirada', this.value)">
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">RMA</div>
+                    <input class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.rma}" oninput="updateData(${s.id}, 'rma', this.value)">
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">¿REFACCIÓN SE QUEDA?</div>
+                    ${sel('refaccionSeQueda', ['SI', 'NO'])}
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">MOTIVO SE QUEDA</div>
+                    <input class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.motivoSeQueda}" oninput="updateData(${s.id}, 'motivoSeQueda', this.value)">
+                </div>
+
+                <div class="row-grid">
+                    <div class="cell-label">PERSONAL AUTORIZA</div>
+                    <input class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
+                           value="${d.personalAutoriza}" oninput="updateData(${s.id}, 'personalAutoriza', this.value)">
+                </div>
+            `;
+        }
+
+        // Acciones y Lógicas para las pestañas
+        function addSheet() { 
+            const newSheet = createInitialData();
+            sheets.push(newSheet); 
+            activeSheetId = newSheet.id;
+            render(); 
+            showToast(`Nueva pestaña "${newSheet.name}" agregada`);
+        }
+
+        function setActiveSheet(id) {
+            activeSheetId = id;
+            render();
+        }
+
+        function renameSheet(id, newName) {
+            const sheet = sheets.find(s => s.id === id);
+            if (sheet && newName.trim() !== "") {
+                sheet.name = newName.trim();
+                render();
+            }
+        }
+
+        function deleteSheet(id, event) {
+            event.stopPropagation(); // Evitar alternar de pestaña al hacer clic en el botón de cerrar de la pestaña
+            
+            if (sheets.length <= 1) return; // Mantener siempre al menos una pestaña activa
+            
+            const index = sheets.findIndex(s => s.id === id);
+            sheets = sheets.filter(s => s.id !== id);
+            
+            if (activeSheetId === id) {
+                // Alternar a la pestaña izquierda o más cercana
+                activeSheetId = sheets[Math.max(0, index - 1)].id;
+            }
+            render();
+            showToast('Pestaña eliminada correctamente');
+        }
+
+        function clearAll() { 
+            if (confirm('¿Estás totalmente seguro de que deseas reiniciar la aplicación? Esto borrará todas las pestañas y su información.')) {
+                init(); 
+                showToast('Hojas limpiadas con éxito');
+            }
+        }
+
+        function updateData(id, field, value) { 
+            const sheet = sheets.find(s => s.id === id);
+            if (sheet) {
+                sheet.data[field] = value; 
+            }
+        }
+        
+        // Conversor de objeto de datos a texto formateado limpio
+        function getFieldsText(sheet) {
+            return Object.entries(sheet.data).map(([key, value]) => {
+                const label = key.replace(/([A-Z])/g, ' $1').toUpperCase().trim();
+                return `${label}: ${value || ''}`;
+            }).join('\n');
+        }
+
+        // Generador de texto consolidado con encabezado identificativo de pestañas
+        function buildFormattedTextWithHeader(sheet) {
+            let output = `--- DATOS DE FORMATO: ${sheet.name.toUpperCase()} ---\n`;
+            output += getFieldsText(sheet);
+            return output;
+        }
+
+        // COPIAR SÓLO LA HOJA ACTUAL (Sin la cabecera identificadora, tal como se solicitó)
+        function copyActiveSheet() {
+            const activeSheet = sheets.find(s => s.id === activeSheetId);
+            if (!activeSheet) return;
+
+            // Obtener texto directo sin encabezados de pestaña
+            const text = getFieldsText(activeSheet);
+            performClipboardCopy(text, `Datos de la "${activeSheet.name}" copiados al portapapeles`);
+        }
+
+        // COPIAR TODAS LAS HOJAS
+        function copyAll() {
+            const text = sheets.map(s => buildFormattedTextWithHeader(s)).join('\n\n========================================\n\n');
+            performClipboardCopy(text, `¡Se copiaron los datos de las ${sheets.length} hojas creadas!`);
+        }
+
+        // Mecanismo confiable de copiado al portapapeles compatible con sandboxed frames
+        function performClipboardCopy(text, successMessage) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-9999px";
+            textArea.style.top = "0px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    showToast(successMessage);
+                } else {
+                    showToast('Ocurrió un inconveniente al copiar. Hazlo manualmente.', true);
+                }
+            } catch (err) {
+                showToast('Error de compatibilidad del portapapeles', true);
+            }
+            document.body.removeChild(textArea);
+        }
+
+        // Inicializar la aplicación
+        init();
+    </script>
+</body>
+</html>
