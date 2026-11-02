@@ -37,6 +37,10 @@
             border-top-right-radius: 6px;
             transition: all 0.2s ease;
         }
+        /* Estilos para el selector emergente de hora 24h */
+        .time-picker-popover {
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        }
     </style>
 </head>
 <body class="bg-slate-100 min-h-screen font-sans">
@@ -45,6 +49,25 @@
     <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-10 opacity-0 pointer-events-none transition-all duration-300 bg-gray-900 text-white px-6 py-3 rounded-lg shadow-xl flex items-center gap-2">
         <span id="toast-icon">✨</span>
         <span id="toast-message">Copiado con éxito</span>
+    </div>
+
+    <!-- Modal de confirmación para restablecer -->
+    <div id="confirm-modal" class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 text-center transform transition-all">
+            <div class="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4 text-xl">
+                ⚠️
+            </div>
+            <h3 class="text-base font-bold text-gray-900 mb-2">¿Restablecer todo?</h3>
+            <p class="text-xs text-gray-500 mb-6">Esta acción borrará todas las pestañas y su información.</p>
+            <div class="flex gap-3 justify-center">
+                <button onclick="closeConfirmModal(false)" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-lg transition">
+                    Cancelar
+                </button>
+                <button onclick="closeConfirmModal(true)" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-lg transition">
+                    Sí, reiniciar
+                </button>
+            </div>
+        </div>
     </div>
 
     <div id="app"></div>
@@ -74,6 +97,7 @@
         // Estado Global de la aplicación
         let sheets = [];
         let activeSheetId = null;
+        let activeTimePicker = null; // Guardar id de selector activo
 
         // Generar estructura vacía para una nueva pestaña
         function createInitialData(customName) {
@@ -161,7 +185,7 @@
                         </div>
                         
                         <div class="flex flex-wrap items-center gap-2">
-                            <!-- Enlace directo de redirección solicitado -->
+                            <!-- Enlace directo de redirección -->
                             <a href="https://sm.cnoc.telmexit.com/sm/index.do?_" target="_blank" rel="noopener noreferrer" 
                                class="bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-semibold py-2 px-3 rounded flex items-center gap-1.5 transition duration-150 shadow-sm">
                                 🌐 Abrir CNOC SM
@@ -171,12 +195,7 @@
                                     title="Copia los datos de esta pestaña sin el encabezado">
                                 📋 Copiar Hoja Activa
                             </button>
-                            <button onclick="copyAll()" 
-                                    class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2 px-3 rounded flex items-center gap-1.5 transition duration-150 shadow-sm"
-                                    title="Copia el contenido consolidado de todas tus hojas creadas">
-                                📚 Copiar Todas las Hojas
-                            </button>
-                            <button onclick="clearAll()" 
+                            <button onclick="openConfirmModal()" 
                                     class="bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold py-2 px-3 rounded flex items-center gap-1.5 transition duration-150 shadow-sm">
                                 🧹 Restablecer Todo
                             </button>
@@ -232,7 +251,6 @@
                                        title="Modifica el nombre de la pestaña aquí"
                                        placeholder="Nombre de pestaña" />
                             </div>
-                            <span class="text-xs text-gray-400 font-mono">ID: #${Math.floor(activeSheet.id % 10000)}</span>
                         </div>
 
                         <!-- Formulario de Campos -->
@@ -243,6 +261,105 @@
                     </div>
                 </main>
             `;
+
+            // Agregar listener global para cerrar el desplegable de hora al hacer clic fuera
+            document.onclick = function(e) {
+                if (!e.target.closest('.time-picker-container')) {
+                    closeAllTimePickers();
+                }
+            };
+        }
+
+        // Helper para renderizar selector de hora en formato 24 hrs con desplegable visual
+        function renderTimePickerField(sId, key, currentValue, placeholderText) {
+            // Extraer hora y minutos de "HH:MM AM/PM" o "HH:MM"
+            const timeOnly = currentValue ? currentValue.split(' ')[0] : '';
+            const currentHour = timeOnly ? timeOnly.split(':')[0] : '12';
+            const currentMin = timeOnly ? timeOnly.split(':')[1] : '00';
+            const pickerId = `picker_${sId}_${key}`;
+            const isOpen = activeTimePicker === pickerId;
+
+            let hoursOptions = '';
+            for (let i = 0; i < 24; i++) {
+                const h = String(i).padStart(2, '0');
+                hoursOptions += `<option value="${h}" ${currentHour === h ? 'selected' : ''}>${h} hs</option>`;
+            }
+
+            let minutesOptions = '';
+            for (let i = 0; i < 60; i++) {
+                const m = String(i).padStart(2, '0');
+                minutesOptions += `<option value="${m}" ${currentMin === m ? 'selected' : ''}>${m} min</option>`;
+            }
+
+            return `
+                <div class="relative w-full time-picker-container">
+                    <div class="flex items-center">
+                        <input type="text" 
+                               readonly
+                               placeholder="${placeholderText}" 
+                               class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none cursor-pointer bg-white" 
+                               value="${currentValue || ''}" 
+                               onclick="toggleTimePicker('${pickerId}', event)">
+                        <button type="button" 
+                                onclick="toggleTimePicker('${pickerId}', event)" 
+                                class="p-2 text-gray-500 hover:text-emerald-600 focus:outline-none text-xs">
+                            🕒
+                        </button>
+                    </div>
+
+                    ${isOpen ? `
+                        <div class="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg p-3 shadow-xl time-picker-popover flex flex-col gap-2 w-64">
+                            <div class="text-[11px] font-bold text-gray-600 border-b pb-1 flex justify-between items-center">
+                                <span>SELECCIONAR HORA</span>
+                                <span class="text-emerald-600 text-xs">${currentValue || '12:00 PM'}</span>
+                            </div>
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="flex-1">
+                                    <label class="text-[10px] text-gray-400 font-semibold block mb-0.5">HORA (00-23)</label>
+                                    <select id="h_${pickerId}" class="w-full text-xs p-1.5 border border-gray-300 rounded bg-gray-50 focus:bg-white focus:outline-none font-mono">
+                                        ${hoursOptions}
+                                    </select>
+                                </div>
+                                <span class="text-base font-bold text-gray-400 pt-3">:</span>
+                                <div class="flex-1">
+                                    <label class="text-[10px] text-gray-400 font-semibold block mb-0.5">MINUTO (00-59)</label>
+                                    <select id="m_${pickerId}" class="w-full text-xs p-1.5 border border-gray-300 rounded bg-gray-50 focus:bg-white focus:outline-none font-mono">
+                                        ${minutesOptions}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="flex justify-end gap-1 pt-1 border-t mt-1">
+                                <button type="button" onclick="closeAllTimePickers()" class="px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-100 rounded">Cancelar</button>
+                                <button type="button" onclick="applyTimeSelection(${sId}, '${key}', '${pickerId}')" class="px-3 py-1 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded shadow-sm">Aplicar</button>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        function toggleTimePicker(id, event) {
+            if (event) event.stopPropagation();
+            activeTimePicker = activeTimePicker === id ? null : id;
+            render();
+        }
+
+        function closeAllTimePickers() {
+            if (activeTimePicker !== null) {
+                activeTimePicker = null;
+                render();
+            }
+        }
+
+        function applyTimeSelection(sId, key, pickerId) {
+            const hVal = parseInt(document.getElementById(`h_${pickerId}`).value, 10);
+            const h = document.getElementById(`h_${pickerId}`).value;
+            const m = document.getElementById(`m_${pickerId}`).value;
+            const period = hVal >= 12 ? 'PM' : 'AM';
+            const formattedTime = `${h}:${m} ${period}`;
+            updateData(sId, key, formattedTime);
+            activeTimePicker = null;
+            render();
         }
 
         // Renderizado del formulario para la hoja activa con mapeo de selects
@@ -256,6 +373,10 @@
                     </select>
                 </div>
             `;
+
+            // Obtener motivos de la categoría y agregar siempre la opción de Escritura Libre al final del desplegable
+            const motivosCatalogo = codigosYMotivos[d.codigoCierre] || [];
+            const esMotivoPersonalizado = d.codigoCierre && !motivosCatalogo.includes(d.motivoCierre) && d.motivoCierre !== "";
 
             return `
                 <!-- Datos de Estatus -->
@@ -277,12 +398,22 @@
 
                 <div class="row-grid">
                     <div class="cell-label">MOTIVO DE CIERRE</div>
-                    <select class="p-2 w-full text-xs bg-transparent focus:outline-none" 
-                            onchange="updateData(${s.id}, 'motivoCierre', this.value)"
-                            ${!d.codigoCierre ? 'disabled' : ''}>
-                        <option value="">${d.codigoCierre ? 'Seleccione un motivo...' : 'Primero elija código de cierre'}</option>
-                        ${(codigosYMotivos[d.codigoCierre] || []).map(m => `<option ${d.motivoCierre === m ? 'selected' : ''}>${m}</option>`).join('')}
-                    </select>
+                    <div class="flex flex-col gap-1 p-1 w-full">
+                        <select class="p-1 w-full text-xs bg-transparent focus:outline-none ${esMotivoPersonalizado ? 'border-b border-gray-200' : ''}" 
+                                onchange="handleMotivoChange(${s.id}, this.value)"
+                                ${!d.codigoCierre ? 'disabled' : ''}>
+                            <option value="">${d.codigoCierre ? 'Seleccione un motivo...' : 'Primero elija código de cierre'}</option>
+                            ${motivosCatalogo.map(m => `<option ${d.motivoCierre === m ? 'selected' : ''}>${m}</option>`).join('')}
+                            <option value="__CUSTOM__" ${esMotivoPersonalizado ? 'selected' : ''}>✏️ Escribir motivo libremente...</option>
+                        </select>
+                        ${esMotivoPersonalizado ? `
+                            <input type="text" 
+                                   class="p-1 w-full text-xs bg-gray-50 focus:bg-white focus:ring-1 focus:ring-emerald-500 focus:outline-none rounded border border-gray-200 mt-1" 
+                                   value="${d.motivoCierre || ''}" 
+                                   placeholder="Escribe el motivo personalizado..."
+                                   oninput="updateData(${s.id}, 'motivoCierre', this.value)">
+                        ` : ''}
+                    </div>
                 </div>
 
                 <div class="row-grid">
@@ -326,26 +457,22 @@
 
                 <div class="row-grid">
                     <div class="cell-label">H. LLEGADA</div>
-                    <input type="time" class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
-                           value="${d.horarioLlegada}" oninput="updateData(${s.id}, 'horarioLlegada', this.value)">
+                    ${renderTimePickerField(s.id, 'horarioLlegada', d.horarioLlegada, 'Seleccionar H. Llegada')}
                 </div>
 
                 <div class="row-grid">
                     <div class="cell-label">H. ACCESO</div>
-                    <input type="time" class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
-                           value="${d.horarioAcceso}" oninput="updateData(${s.id}, 'horarioAcceso', this.value)">
+                    ${renderTimePickerField(s.id, 'horarioAcceso', d.horarioAcceso, 'Seleccionar H. Acceso')}
                 </div>
 
                 <div class="row-grid">
                     <div class="cell-label">H. SOLUCIÓN</div>
-                    <input type="time" class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
-                           value="${d.horarioSolucion}" oninput="updateData(${s.id}, 'horarioSolucion', this.value)">
+                    ${renderTimePickerField(s.id, 'horarioSolucion', d.horarioSolucion, 'Seleccionar H. Solución')}
                 </div>
 
                 <div class="row-grid">
                     <div class="cell-label">H. SALIDA</div>
-                    <input type="time" class="p-2 w-full text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none" 
-                           value="${d.horarioSalida}" oninput="updateData(${s.id}, 'horarioSalida', this.value)">
+                    ${renderTimePickerField(s.id, 'horarioSalida', d.horarioSalida, 'Seleccionar H. Salida')}
                 </div>
 
                 <div class="row-grid">
@@ -483,6 +610,15 @@
             `;
         }
 
+        function handleMotivoChange(sId, value) {
+            if (value === '__CUSTOM__') {
+                updateData(sId, 'motivoCierre', '');
+            } else {
+                updateData(sId, 'motivoCierre', value);
+            }
+            render();
+        }
+
         // Acciones y Lógicas para las pestañas
         function addSheet() { 
             const newSheet = createInitialData();
@@ -506,24 +642,30 @@
         }
 
         function deleteSheet(id, event) {
-            event.stopPropagation(); // Evitar alternar de pestaña al hacer clic en el botón de cerrar de la pestaña
-            
-            if (sheets.length <= 1) return; // Mantener siempre al menos una pestaña activa
+            event.stopPropagation(); 
+            if (sheets.length <= 1) return;
             
             const index = sheets.findIndex(s => s.id === id);
             sheets = sheets.filter(s => s.id !== id);
             
             if (activeSheetId === id) {
-                // Alternar a la pestaña izquierda o más cercana
                 activeSheetId = sheets[Math.max(0, index - 1)].id;
             }
             render();
             showToast('Pestaña eliminada correctamente');
         }
 
-        function clearAll() { 
-            if (confirm('¿Estás totalmente seguro de que deseas reiniciar la aplicación? Esto borrará todas las pestañas y su información.')) {
-                init(); 
+        let pendingReset = false;
+        function openConfirmModal() {
+            document.getElementById('confirm-modal').classList.remove('hidden');
+            document.getElementById('confirm-modal').classList.add('flex');
+        }
+
+        function closeConfirmModal(confirm) {
+            document.getElementById('confirm-modal').classList.add('hidden');
+            document.getElementById('confirm-modal').classList.remove('flex');
+            if (confirm) {
+                init();
                 showToast('Hojas limpiadas con éxito');
             }
         }
@@ -535,7 +677,6 @@
             }
         }
         
-        // Conversor de objeto de datos a texto formateado limpio
         function getFieldsText(sheet) {
             return Object.entries(sheet.data).map(([key, value]) => {
                 const label = key.replace(/([A-Z])/g, ' $1').toUpperCase().trim();
@@ -543,30 +684,14 @@
             }).join('\n');
         }
 
-        // Generador de texto consolidado con encabezado identificativo de pestañas
-        function buildFormattedTextWithHeader(sheet) {
-            let output = `--- DATOS DE FORMATO: ${sheet.name.toUpperCase()} ---\n`;
-            output += getFieldsText(sheet);
-            return output;
-        }
-
-        // COPIAR SÓLO LA HOJA ACTUAL (Sin la cabecera identificadora, tal como se solicitó)
         function copyActiveSheet() {
             const activeSheet = sheets.find(s => s.id === activeSheetId);
             if (!activeSheet) return;
 
-            // Obtener texto directo sin encabezados de pestaña
             const text = getFieldsText(activeSheet);
-            performClipboardCopy(text, `Datos de la "${activeSheet.name}" copiados al portapapeles`);
+            performClipboardCopy(text, `Datos de "${activeSheet.name}" copiados al portapapeles`);
         }
 
-        // COPIAR TODAS LAS HOJAS
-        function copyAll() {
-            const text = sheets.map(s => buildFormattedTextWithHeader(s)).join('\n\n========================================\n\n');
-            performClipboardCopy(text, `¡Se copiaron los datos de las ${sheets.length} hojas creadas!`);
-        }
-
-        // Mecanismo confiable de copiado al portapapeles compatible con sandboxed frames
         function performClipboardCopy(text, successMessage) {
             const textArea = document.createElement("textarea");
             textArea.value = text;
@@ -582,7 +707,7 @@
                 if (successful) {
                     showToast(successMessage);
                 } else {
-                    showToast('Ocurrió un inconveniente al copiar. Hazlo manualmente.', true);
+                    showToast('Ocurrió un inconveniente al copiar.', true);
                 }
             } catch (err) {
                 showToast('Error de compatibilidad del portapapeles', true);
