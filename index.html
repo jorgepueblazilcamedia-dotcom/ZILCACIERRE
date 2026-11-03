@@ -274,22 +274,10 @@
         function renderTimePickerField(sId, key, currentValue, placeholderText) {
             // Extraer hora y minutos de "HH:MM AM/PM" o "HH:MM"
             const timeOnly = currentValue ? currentValue.split(' ')[0] : '';
-            const currentHour = timeOnly ? timeOnly.split(':')[0] : '12';
-            const currentMin = timeOnly ? timeOnly.split(':')[1] : '00';
+            const currentHour = timeOnly ? timeOnly.split(':')[0] : '14';
+            const currentMin = timeOnly ? timeOnly.split(':')[1] : '30';
             const pickerId = `picker_${sId}_${key}`;
             const isOpen = activeTimePicker === pickerId;
-
-            let hoursOptions = '';
-            for (let i = 0; i < 24; i++) {
-                const h = String(i).padStart(2, '0');
-                hoursOptions += `<option value="${h}" ${currentHour === h ? 'selected' : ''}>${h} hs</option>`;
-            }
-
-            let minutesOptions = '';
-            for (let i = 0; i < 60; i++) {
-                const m = String(i).padStart(2, '0');
-                minutesOptions += `<option value="${m}" ${currentMin === m ? 'selected' : ''}>${m} min</option>`;
-            }
 
             return `
                 <div class="relative w-full time-picker-container">
@@ -308,29 +296,61 @@
                     </div>
 
                     ${isOpen ? `
-                        <div class="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg p-3 shadow-xl time-picker-popover flex flex-col gap-2 w-64">
-                            <div class="text-[11px] font-bold text-gray-600 border-b pb-1 flex justify-between items-center">
-                                <span>SELECCIONAR HORA</span>
-                                <span class="text-emerald-600 text-xs">${currentValue || '12:00 PM'}</span>
+                        <div class="absolute right-0 sm:left-0 top-full mt-1 z-50 bg-[#2d2e32] text-white rounded-2xl p-5 shadow-2xl time-picker-popover flex flex-col gap-4 w-72 border border-gray-700">
+                            <div class="text-sm font-medium text-gray-300">
+                                Selecciona una hora
                             </div>
-                            <div class="flex items-center justify-between gap-2">
-                                <div class="flex-1">
-                                    <label class="text-[10px] text-gray-400 font-semibold block mb-0.5">HORA (00-23)</label>
-                                    <select id="h_${pickerId}" class="w-full text-xs p-1.5 border border-gray-300 rounded bg-gray-50 focus:bg-white focus:outline-none font-mono">
-                                        ${hoursOptions}
-                                    </select>
+                            
+                            <div class="flex items-center justify-center gap-2 my-1">
+                                <!-- Caja Hora -->
+                                <div class="flex flex-col items-start flex-1">
+                                    <div class="w-full bg-[#2555ab] border border-[#4a82e8] rounded-2xl p-3 flex items-center justify-center shadow-inner">
+                                        <input type="number" 
+                                               id="h_${pickerId}" 
+                                               min="0" 
+                                               max="23" 
+                                               value="${currentHour}" 
+                                               oninput="if(this.value.length>2)this.value=this.value.slice(0,2); if(parseInt(this.value)>23)this.value=23;"
+                                               class="w-full text-center text-4xl font-normal bg-transparent text-white focus:outline-none font-sans [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none">
+                                    </div>
+                                    <span class="text-xs text-gray-400 mt-1.5 ml-1 font-medium">Hora</span>
                                 </div>
-                                <span class="text-base font-bold text-gray-400 pt-3">:</span>
-                                <div class="flex-1">
-                                    <label class="text-[10px] text-gray-400 font-semibold block mb-0.5">MINUTO (00-59)</label>
-                                    <select id="m_${pickerId}" class="w-full text-xs p-1.5 border border-gray-300 rounded bg-gray-50 focus:bg-white focus:outline-none font-mono">
-                                        ${minutesOptions}
-                                    </select>
+
+                                <!-- Dos Puntos Separadores -->
+                                <span class="text-3xl font-bold text-white mb-5">:</span>
+
+                                <!-- Caja Minuto -->
+                                <div class="flex flex-col items-start flex-1">
+                                    <div class="w-full bg-[#3c3e44] hover:bg-[#464850] rounded-2xl p-3 flex items-center justify-center transition">
+                                        <input type="number" 
+                                               id="m_${pickerId}" 
+                                               min="0" 
+                                               max="59" 
+                                               value="${currentMin}" 
+                                               oninput="if(this.value.length>2)this.value=this.value.slice(0,2); if(parseInt(this.value)>59)this.value=59;"
+                                               class="w-full text-center text-4xl font-normal bg-transparent text-white focus:outline-none font-sans [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none">
+                                    </div>
+                                    <span class="text-xs text-gray-400 mt-1.5 ml-1 font-medium">Minuto</span>
                                 </div>
                             </div>
-                            <div class="flex justify-end gap-1 pt-1 border-t mt-1">
-                                <button type="button" onclick="closeAllTimePickers()" class="px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-100 rounded">Cancelar</button>
-                                <button type="button" onclick="applyTimeSelection(${sId}, '${key}', '${pickerId}')" class="px-3 py-1 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded shadow-sm">Aplicar</button>
+
+                            <!-- Footer de Acciones -->
+                            <div class="flex items-center justify-between pt-2">
+                                <div class="text-gray-400 hover:text-white cursor-pointer p-1.5 rounded-full hover:bg-gray-800 transition" onclick="toggleTimePicker('${pickerId}', event)">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <button type="button" 
+                                            onclick="closeAllTimePickers()" 
+                                            class="px-3 py-1.5 text-sm text-[#8ab4f8] hover:bg-gray-800 rounded-lg font-medium transition">
+                                        Cancelar
+                                    </button>
+                                    <button type="button" 
+                                            onclick="applyTimeSelection(${sId}, '${key}', '${pickerId}')" 
+                                            class="px-3 py-1.5 text-sm text-[#8ab4f8] hover:bg-gray-800 rounded-lg font-medium transition">
+                                        Aceptar
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     ` : ''}
@@ -352,10 +372,22 @@
         }
 
         function applyTimeSelection(sId, key, pickerId) {
-            const hVal = parseInt(document.getElementById(`h_${pickerId}`).value, 10);
-            const h = document.getElementById(`h_${pickerId}`).value;
-            const m = document.getElementById(`m_${pickerId}`).value;
+            let hInput = document.getElementById(`h_${pickerId}`).value;
+            let mInput = document.getElementById(`m_${pickerId}`).value;
+            
+            let hVal = parseInt(hInput, 10);
+            let mVal = parseInt(mInput, 10);
+
+            if (isNaN(hVal) || hVal < 0) hVal = 0;
+            if (hVal > 23) hVal = 23;
+
+            if (isNaN(mVal) || mVal < 0) mVal = 0;
+            if (mVal > 59) mVal = 59;
+
+            const h = String(hVal).padStart(2, '0');
+            const m = String(mVal).padStart(2, '0');
             const period = hVal >= 12 ? 'PM' : 'AM';
+            
             const formattedTime = `${h}:${m} ${period}`;
             updateData(sId, key, formattedTime);
             activeTimePicker = null;
